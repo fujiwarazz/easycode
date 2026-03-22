@@ -214,23 +214,20 @@ class MessageLogPanel(Container):
 
     def compose(self) -> ComposeResult:
         yield Label("📜 Messages")
-        with VerticalScroll(id="messages-scroll"):
-            yield Container(id="messages-container")
+        yield VerticalScroll(id="messages-scroll")
 
     def add_message(self, content: str, msg_type: str = "system") -> None:
         """Add a message to the log."""
-        container = self.query_one("#messages-container", Container)
-        msg = MessageItem(content, msg_type)
-        container.mount(msg)
-
-        # Auto-scroll
         scroll = self.query_one("#messages-scroll", VerticalScroll)
-        scroll.scroll_end(animate=False)
+        msg = MessageItem(content, msg_type)
+        scroll.mount(msg)
+        # Scroll to the newly added message
+        msg.scroll_visible()
 
     def clear_messages(self) -> None:
         """Clear all messages."""
-        container = self.query_one("#messages-container", Container)
-        for child in list(container.children):
+        scroll = self.query_one("#messages-scroll", VerticalScroll)
+        for child in list(scroll.children):
             child.remove()
 
 
