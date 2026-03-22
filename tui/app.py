@@ -65,15 +65,18 @@ class EasycodeApp(App):
     #left-panel {
         width: 20;
         min-width: 15;
+        overflow: hidden;
     }
 
     #center-panel {
         width: 1fr;
+        overflow: hidden;
     }
 
     #right-panel {
         width: 25;
         min-width: 5;
+        overflow: hidden;
     }
 
     #right-panel.collapsed {
@@ -86,10 +89,12 @@ class EasycodeApp(App):
 
     AgentsPanel, TasksPanel {
         height: 1fr;
+        overflow: hidden;
     }
 
     MessageLogPanel, TaskDetailPanel {
         height: 100%;
+        overflow: hidden;
     }
     """
 

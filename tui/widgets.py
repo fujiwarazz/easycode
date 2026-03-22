@@ -147,9 +147,10 @@ class MessageItem(Static):
     MessageItem {
         padding: 0 1;
         margin: 0;
-        width: 1fr;
+        width: 100%;
+        text-align: left;
         text-wrap: wrap;
-        overflow-x: hidden;
+        overflow-wrap: anywhere;
     }
     MessageItem.system {
         color: $text-muted;
@@ -199,10 +200,11 @@ class MessageLogPanel(Container):
 
     DEFAULT_CSS = """
     MessageLogPanel {
-        width: 2fr;
-        height: 1fr;
+        width: 100%;
+        height: 100%;
         border: solid yellow;
         background: $surface;
+        overflow: hidden;
     }
     MessageLogPanel > Label {
         text-style: bold;
@@ -212,6 +214,7 @@ class MessageLogPanel(Container):
     }
     MessageLogPanel > VerticalScroll {
         height: 1fr;
+        width: 100%;
         overflow-x: hidden;
     }
     """
