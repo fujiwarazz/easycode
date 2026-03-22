@@ -84,6 +84,8 @@ class WorktreeSession(BaseModel):
     agent_id: str
     created_at: datetime = Field(default_factory=datetime.now)
     is_active: bool = True
+    output_commit: Optional[str] = None  # Commit hash after task completion
+    commit_message: Optional[str] = None  # Commit message
 
     @field_validator("path", mode="before")
     @classmethod

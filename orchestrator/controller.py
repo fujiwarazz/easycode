@@ -498,6 +498,29 @@ You can also just type a goal directly without /plan"""
                     logger.error(f"Failed to collect diff: {e}")
                     # Don't fail the task just because diff collection failed
 
+                # Auto-commit changes to task branch
+                if result.changed_files or diff_result.files:
+                    commit_message = f"easycode: complete task {task_id}\n\n{task.title}"
+                    if result.summary:
+                        commit_message += f"\n\n{result.summary}"
+
+                    try:
+                        commit_success, commit_hash = await self.worktree_manager.commit_changes(
+                            worktree_path=worktree_path,
+                            message=commit_message,
+                            add_all=True,
+                        )
+
+                        if commit_success and commit_hash:
+                            task.worktree.output_commit = commit_hash
+                            task.worktree.commit_message = commit_message
+                            logger.info(f"Changes committed: {commit_hash[:8]}")
+                        else:
+                            logger.warning(f"Failed to commit changes, but task will be marked done")
+                    except Exception as commit_error:
+                        logger.error(f"Error committing changes: {commit_error}")
+                        # Don't fail the task, just log the error
+
             # Update task status based on agent result
             task.status = TaskStatus.DONE if result.success else TaskStatus.FAILED
             task.completed_at = datetime.now()
@@ -590,11 +613,29 @@ You can also just type a goal directly without /plan"""
         if not task:
             return f"Task not found: {task_id}"
 
+        # Check if already merged
+        if task.status == TaskStatus.MERGED:
+            return f"Task {task_id} is already merged."
+
+        # Check task status
         if task.status != TaskStatus.DONE:
             return f"Task must be done before merging. Current status: {task.status.value}"
 
         if not task.worktree:
-            return "Task has no worktree."
+            return f"Task {task_id} has no worktree. Cannot merge."
+
+        # Check if task has committed changes
+        if not task.worktree.output_commit:
+            # Try to check if there are uncommitted changes
+            if task.worktree.path.exists():
+                status = await self.worktree_manager.get_worktree_status(task.worktree.path)
+                if not status["clean"]:
+                    return (
+                        f"Task {task_id} has uncommitted changes.\n"
+                        f"Please ensure the task completed successfully.\n"
+                        f"Files: {status['modified'] + status['untracked']}"
+                    )
+            return f"Task {task_id} has no committed changes. Run /run {task_id} first."
 
         # Emit merge started event
         await self.event_bus.publish(create_task_event(
@@ -603,7 +644,7 @@ You can also just type a goal directly without /plan"""
             source="controller",
         ))
 
-        logger.info(f"Merging task: {task_id}")
+        logger.info(f"Merging task: {task_id} (commit: {task.worktree.output_commit[:8]})")
 
         try:
             # Perform merge
@@ -614,6 +655,13 @@ You can also just type a goal directly without /plan"""
             )
 
             if not result.success:
+                # Check if it's because branch is already merged
+                if "Already up to date" in result.message or "already up-to-date" in result.message.lower():
+                    logger.info(f"Task {task_id} already merged")
+                    task.status = TaskStatus.MERGED
+                    await self.state_repository.save_state(self.state)
+                    return f"Task {task_id} is already merged."
+
                 await self.event_bus.publish(create_task_event(
                     EventType.MERGE_FAILED,
                     task_id=task_id,
@@ -635,7 +683,8 @@ You can also just type a goal directly without /plan"""
 
             # Cleanup worktree
             await self.worktree_manager.remove_worktree(task.worktree.path)
-            del self.state.worktrees[task.worktree.id]
+            if task.worktree.id in self.state.worktrees:
+                del self.state.worktrees[task.worktree.id]
 
             # Delete feature branch
             await self.merge_manager.delete_branch(task.worktree.branch)
@@ -646,7 +695,7 @@ You can also just type a goal directly without /plan"""
 
             # Emit merge completed event
             await self.event_bus.publish(create_task_event(
-                EventType.MERGE_MERGED,
+                EventType.TASK_MERGED,
                 task_id=task_id,
                 source="controller",
                 commit=result.commit_hash,
@@ -656,10 +705,11 @@ You can also just type a goal directly without /plan"""
 
             await self.state_repository.save_state(self.state)
 
-            return f"Successfully merged task {task_id} ({result.commit_hash[:8]})"
+            return f"Successfully merged task {task_id} ({result.commit_hash[:8] if result.commit_hash else 'N/A'})"
 
         except Exception as e:
-            logger.error(f"Merge failed: {task_id} - {e}")
+            import traceback
+            logger.error(f"Merge failed: {task_id} - {e}\n{traceback.format_exc()}")
 
             await self.event_bus.publish(create_task_event(
                 EventType.MERGE_FAILED,

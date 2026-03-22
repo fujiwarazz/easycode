@@ -375,3 +375,103 @@ class WorktreeManager:
         """Check if the main workspace has no uncommitted changes."""
         status = await self.get_worktree_status(self.workspace)
         return status["clean"]
+
+    async def commit_changes(
+        self,
+        worktree_path: Path,
+        message: str,
+        add_all: bool = True,
+    ) -> tuple[bool, Optional[str]]:
+        """
+        Commit changes in a worktree.
+
+        Args:
+            worktree_path: Path to the worktree.
+            message: Commit message.
+            add_all: Whether to add all changes before committing.
+
+        Returns:
+            Tuple of (success, commit_hash).
+        """
+        logger.info(f"Committing changes in worktree: {worktree_path}")
+
+        try:
+            # Check if there are any changes
+            status = await self.get_worktree_status(worktree_path)
+
+            if status["clean"]:
+                logger.info("No changes to commit")
+                # Get current commit hash
+                _, commit_hash, _ = await self._run_git(
+                    ["rev-parse", "HEAD"], cwd=worktree_path, check=False
+                )
+                return True, commit_hash.strip() if commit_hash.strip() else None
+
+            # Stage all changes
+            if add_all:
+                await self._run_git(["add", "-A"], cwd=worktree_path, check=True)
+                logger.debug(f"Staged {len(status['modified']) + len(status['untracked'])} files")
+
+            # Check if there are staged changes
+            _, diff_stdout, _ = await self._run_git(
+                ["diff", "--cached", "--name-only"], cwd=worktree_path, check=False
+            )
+
+            if not diff_stdout.strip():
+                logger.info("No staged changes to commit")
+                _, commit_hash, _ = await self._run_git(
+                    ["rev-parse", "HEAD"], cwd=worktree_path, check=False
+                )
+                return True, commit_hash.strip() if commit_hash.strip() else None
+
+            # Commit
+            await self._run_git(
+                ["commit", "-m", message],
+                cwd=worktree_path,
+                check=True
+            )
+
+            # Get the new commit hash
+            _, commit_hash, _ = await self._run_git(
+                ["rev-parse", "HEAD"], cwd=worktree_path, check=True
+            )
+
+            logger.info(f"Committed changes: {commit_hash.strip()[:8]}")
+
+            return True, commit_hash.strip()
+
+        except GitError as e:
+            logger.error(f"Failed to commit changes: {e}")
+            return False, None
+        except Exception as e:
+            logger.error(f"Unexpected error during commit: {e}")
+            return False, None
+
+    async def has_commits_ahead(
+        self,
+        worktree_path: Path,
+        base_branch: str = "main",
+    ) -> tuple[bool, int]:
+        """
+        Check if worktree branch has commits ahead of base branch.
+
+        Args:
+            worktree_path: Path to the worktree.
+            base_branch: Base branch to compare against.
+
+        Returns:
+            Tuple of (has_commits, commits_ahead_count).
+        """
+        try:
+            _, stdout, _ = await self._run_git(
+                ["rev-list", "--count", f"{base_branch}..HEAD"],
+                cwd=worktree_path,
+                check=False
+            )
+
+            count = int(stdout.strip()) if stdout.strip().isdigit() else 0
+            return count > 0, count
+
+        except Exception as e:
+            logger.error(f"Failed to check commits ahead: {e}")
+            return False, 0
