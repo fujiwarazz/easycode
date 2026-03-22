@@ -56,7 +56,7 @@ class EasycodeApp(App):
     Screen {
         layout: grid;
         grid-size: 3 2;
-        grid-rows: 1fr 3;
+        grid-rows: 1fr 5;
         grid-columns: 1fr 2fr 1fr;
     }
 
@@ -132,8 +132,6 @@ class EasycodeApp(App):
 
         with Container(id="input-area"):
             yield InputBar()
-
-        yield Footer()
 
     async def on_mount(self) -> None:
         """Handle app mount - initialize controller and start event listener."""

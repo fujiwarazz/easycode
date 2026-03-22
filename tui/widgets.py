@@ -309,12 +309,18 @@ class InputBar(Container):
 
     DEFAULT_CSS = """
     InputBar {
-        height: 3;
+        height: 5;
         padding: 0 1;
         background: $surface-darken-3;
     }
     InputBar Input {
         width: 1fr;
+        height: 3;
+    }
+    InputBar .hints {
+        color: $text-muted;
+        text-style: dim;
+        height: 1;
     }
     """
 
@@ -326,8 +332,8 @@ class InputBar(Container):
             self.value = value
 
     def compose(self) -> ComposeResult:
-        yield Label(">", classes="input-prompt")
-        yield Input(placeholder="Type a command or goal...", id="main-input")
+        yield Input(placeholder="Type a command or goal... (n:New r:Run m:Merge q:Quit)", id="main-input")
+        yield Label("[n]New [p]Plan [r]Run [m]Merge [d]Diff [h]Help [q]Quit", classes="hints")
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         """Handle input submission."""
