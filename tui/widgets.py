@@ -236,22 +236,18 @@ class TaskDetailPanel(Container):
 
     DEFAULT_CSS = """
     TaskDetailPanel {
-        width: 1fr;
-        height: 1fr;
+        height: 100%;
         border: solid magenta;
         background: $surface;
-    }
-    TaskDetailPanel.collapsed {
-        width: 5;
-    }
-    TaskDetailPanel.collapsed > VerticalScroll {
-        display: none;
     }
     TaskDetailPanel > Label {
         text-style: bold;
         padding: 0 1;
         background: $primary;
         color: $text;
+    }
+    TaskDetailPanel.collapsed > VerticalScroll {
+        display: none;
     }
     """
 
@@ -264,9 +260,8 @@ class TaskDetailPanel(Container):
             yield Static(id="detail-content", expand=True)
 
     def on_click(self) -> None:
-        """Toggle collapsed state on click."""
-        self.collapsed = not self.collapsed
-        self._update_collapsed()
+        """Toggle collapsed state on click - notify parent."""
+        self.app.action_toggle_detail()
 
     def _update_collapsed(self) -> None:
         """Update UI for collapsed state."""
@@ -276,11 +271,6 @@ class TaskDetailPanel(Container):
         else:
             self.remove_class("collapsed")
             self.query_one(Label).update("📄 Task Details [click]")
-
-    def toggle(self) -> None:
-        """Programmatically toggle collapsed state."""
-        self.collapsed = not self.collapsed
-        self._update_collapsed()
 
     def update_detail(self, task: dict, result: Optional[dict] = None) -> None:
         """Update the task detail view."""

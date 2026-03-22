@@ -54,33 +54,41 @@ class EasycodeApp(App):
 
     CSS = """
     Screen {
-        layout: grid;
-        grid-size: 3 2;
-        grid-rows: 1fr 5;
-        grid-columns: 1fr 2fr 1fr;
+        layout: vertical;
+    }
+
+    #main-content {
+        height: 1fr;
+        layout: horizontal;
     }
 
     #left-panel {
-        column-span: 1;
-        row-span: 1;
+        width: 20;
+        min-width: 15;
     }
 
     #center-panel {
-        column-span: 1;
-        row-span: 1;
+        width: 1fr;
     }
 
     #right-panel {
-        column-span: 1;
-        row-span: 1;
+        width: 25;
+        min-width: 5;
+    }
+
+    #right-panel.collapsed {
+        width: 5;
     }
 
     #input-area {
-        column-span: 3;
-        row-span: 1;
+        height: 5;
     }
 
-    AgentsPanel, TasksPanel, MessageLogPanel, TaskDetailPanel {
+    AgentsPanel, TasksPanel {
+        height: 1fr;
+    }
+
+    MessageLogPanel, TaskDetailPanel {
         height: 100%;
     }
     """
@@ -120,15 +128,16 @@ class EasycodeApp(App):
         """Compose the UI layout."""
         yield Header()
 
-        with Container(id="left-panel"):
-            yield AgentsPanel()
-            yield TasksPanel()
+        with Container(id="main-content"):
+            with Container(id="left-panel"):
+                yield AgentsPanel()
+                yield TasksPanel()
 
-        with Container(id="center-panel"):
-            yield MessageLogPanel()
+            with Container(id="center-panel"):
+                yield MessageLogPanel()
 
-        with Container(id="right-panel"):
-            yield TaskDetailPanel()
+            with Container(id="right-panel"):
+                yield TaskDetailPanel()
 
         with Container(id="input-area"):
             yield InputBar()
@@ -421,8 +430,17 @@ class EasycodeApp(App):
     def action_toggle_detail(self) -> None:
         """Handle 'v' key - toggle detail panel."""
         try:
-            panel = self.query_one(TaskDetailPanel)
-            panel.toggle()
+            right_panel = self.query_one("#right-panel", Container)
+            detail_panel = self.query_one(TaskDetailPanel)
+
+            if right_panel.has_class("collapsed"):
+                right_panel.remove_class("collapsed")
+                detail_panel.collapsed = False
+                detail_panel._update_collapsed()
+            else:
+                right_panel.add_class("collapsed")
+                detail_panel.collapsed = True
+                detail_panel._update_collapsed()
         except NoMatches:
             pass
 
