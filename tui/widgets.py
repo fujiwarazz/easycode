@@ -148,9 +148,7 @@ class MessageItem(Static):
         padding: 0 1;
         margin: 0;
         width: 100%;
-        text-align: left;
-        text-wrap: wrap;
-        overflow-wrap: anywhere;
+        text-wrap: anywhere;
     }
     MessageItem.system {
         color: $text-muted;
