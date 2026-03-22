@@ -315,7 +315,7 @@ class InputBar(Container):
         dock: bottom;
         height: 3;
         padding: 0 1;
-        background: $surface-darken;
+        background: $surface-darken-3;
     }
     InputBar Input {
         width: 1fr;
