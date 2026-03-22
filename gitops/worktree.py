@@ -114,7 +114,17 @@ class WorktreeManager:
             # Try to get HEAD anyway (might work in some cases)
             _, head_stdout, _ = await self._run_git(["rev-parse", "--short", "HEAD"], check=False)
             if head_stdout.strip():
-                return f"detached-{head_stdout.strip()}"
+                # We have commits but no branch (detached HEAD)
+                # Try to find which branch points to this commit
+                commit_hash = head_stdout.strip()
+                _, branch_stdout, _ = await self._run_git(
+                    ["branch", "--points-at", commit_hash], check=False
+                )
+                branches = [b.strip().lstrip("* ") for b in branch_stdout.strip().split("\n") if b.strip()]
+                if branches:
+                    return branches[0]
+                # Return main as default
+                return "main"
             # Default to 'main' for new repos
             return "main"
 
@@ -208,7 +218,7 @@ class WorktreeManager:
         # Ensure worktree directory exists
         self.worktree_dir.mkdir(parents=True, exist_ok=True)
 
-        # Get base branch
+        # Get base branch or commit
         if base_branch is None:
             base_branch = await self.get_current_branch()
 
@@ -220,9 +230,19 @@ class WorktreeManager:
         logger.info(f"Creating worktree at {worktree_path} on branch {branch_name}")
 
         # Create the worktree with a new branch
-        await self._run_git(
-            ["worktree", "add", "-b", branch_name, str(worktree_path), base_branch]
-        )
+        # Use HEAD as base if base_branch is 'main' but might not exist yet
+        try:
+            await self._run_git(
+                ["worktree", "add", "-b", branch_name, str(worktree_path), base_branch],
+                check=True
+            )
+        except GitError:
+            # Fallback: use HEAD directly
+            logger.warning(f"Failed to use {base_branch}, falling back to HEAD")
+            await self._run_git(
+                ["worktree", "add", "-b", branch_name, str(worktree_path), "HEAD"],
+                check=True
+            )
 
         logger.info(f"Worktree created: {worktree_path}")
 
