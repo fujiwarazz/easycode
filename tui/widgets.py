@@ -242,7 +242,7 @@ class TaskDetailPanel(Container):
         background: $surface;
     }
     TaskDetailPanel.collapsed {
-        width: 3;
+        width: 5;
     }
     TaskDetailPanel.collapsed > VerticalScroll {
         display: none;
@@ -253,17 +253,13 @@ class TaskDetailPanel(Container):
         background: $primary;
         color: $text;
     }
-    TaskDetailPanel.collapsed > Label {
-        writing-mode: vertical;
-        height: 100%;
-    }
     """
 
     collapsed: reactive[bool] = reactive(False)
     current_task_id: reactive[str] = reactive("")
 
     def compose(self) -> ComposeResult:
-        yield Label("📄 Task Details [click to collapse]")
+        yield Label("📄 Task Details [click]")
         with VerticalScroll(id="detail-scroll"):
             yield Static(id="detail-content", expand=True)
 
@@ -276,10 +272,10 @@ class TaskDetailPanel(Container):
         """Update UI for collapsed state."""
         if self.collapsed:
             self.add_class("collapsed")
-            self.query_one(Label).update("📄")
+            self.query_one(Label).update("▶")
         else:
             self.remove_class("collapsed")
-            self.query_one(Label).update("📄 Task Details [click to collapse]")
+            self.query_one(Label).update("📄 Task Details [click]")
 
     def toggle(self) -> None:
         """Programmatically toggle collapsed state."""
