@@ -1,0 +1,80 @@
+# Easycode Configuration Example
+# Copy this to config.toml and customize
+
+[workspace]
+# Path to the git repository where agents will work
+path = "."
+
+# Directory for storing worktrees (relative to workspace)
+worktree_dir = ".easycode/worktrees"
+
+# Directory for storing logs
+log_dir = ".easycode/logs"
+
+# Directory for storing state
+state_dir = ".easycode/state"
+
+[mentor]
+# Default mentor agent for planning and coordination
+agent = "claude-cli"
+
+# Maximum concurrent tasks
+max_concurrent = 3
+
+[agents]
+
+[agents.claude-cli]
+type = "claude-cli"
+enabled = true
+# Command to invoke the CLI
+command = ["claude"]
+# Timeout in seconds (0 = no timeout)
+timeout = 600
+# Environment variables
+env = {}
+
+[agents.codex-cli]
+type = "codex-cli"
+enabled = false
+command = ["codex"]
+timeout = 600
+env = {}
+
+[agents.gemini-cli]
+type = "gemini-cli"
+enabled = false
+command = ["gemini"]
+timeout = 600
+env = {}
+
+[agents.mock]
+type = "mock"
+enabled = true
+# Mock agent simulates delays and outputs
+simulate_delay = true
+min_delay = 0.5
+max_delay = 2.0
+
+[verify]
+# Commands to run after merging a task
+commands = [
+    # "pytest",
+    # "ruff check .",
+]
+
+[ui]
+# TUI theme
+theme = "dark"
+
+# Refresh rate in Hz
+refresh_rate = 30
+
+# Show timestamps in logs
+show_timestamps = true
+
+[logging]
+# Log level: DEBUG, INFO, WARNING, ERROR
+level = "INFO"
+
+# Log file name pattern
+file_pattern = "easycode-{date}.log"
