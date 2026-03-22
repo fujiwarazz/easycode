@@ -106,13 +106,17 @@ class WorktreeManager:
 
     async def get_current_branch(self) -> str:
         """Get the current branch name."""
-        _, stdout, _ = await self._run_git(["branch", "--show-current"])
+        returncode, stdout, stderr = await self._run_git(["branch", "--show-current"], check=False)
         branch = stdout.strip()
 
-        # Handle detached HEAD
-        if not branch:
-            _, stdout, _ = await self._run_git(["rev-parse", "--short", "HEAD"])
-            branch = f"detached-{stdout.strip()}"
+        # Handle no commits yet (return code 128 or empty output)
+        if returncode != 0 or not branch:
+            # Try to get HEAD anyway (might work in some cases)
+            _, head_stdout, _ = await self._run_git(["rev-parse", "--short", "HEAD"], check=False)
+            if head_stdout.strip():
+                return f"detached-{head_stdout.strip()}"
+            # Default to 'main' for new repos
+            return "main"
 
         return branch
 
