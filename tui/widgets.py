@@ -147,6 +147,9 @@ class MessageItem(Static):
     MessageItem {
         padding: 0 1;
         margin: 0;
+        width: 1fr;
+        text-wrap: wrap;
+        overflow-x: hidden;
     }
     MessageItem.system {
         color: $text-muted;
@@ -209,6 +212,7 @@ class MessageLogPanel(Container):
     }
     MessageLogPanel > VerticalScroll {
         height: 1fr;
+        overflow-x: hidden;
     }
     """
 
