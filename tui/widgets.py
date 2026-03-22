@@ -148,7 +148,8 @@ class MessageItem(Static):
         padding: 0 1;
         margin: 0;
         width: 100%;
-        text-wrap: anywhere;
+        text-wrap: wrap;
+        overflow: hidden;
     }
     MessageItem.system {
         color: $text-muted;
@@ -166,7 +167,7 @@ class MessageItem(Static):
 
     def __init__(self, content: str, msg_type: str = "system", timestamp: Optional[str] = None):
         super().__init__()
-        self.content = content
+        self._content = content
         self.msg_type = msg_type
         self.timestamp = timestamp or datetime.now().strftime("%H:%M:%S")
 
@@ -187,8 +188,8 @@ class MessageItem(Static):
         indicator, color = indicators.get(self.msg_type, ("???", "white"))
         text.append(f"[{indicator}] ", style=color)
 
-        # Content
-        text.append(self.content)
+        # Content - Rich will handle wrapping with the container width
+        text.append(self._content)
 
         return text
 
