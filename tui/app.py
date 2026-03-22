@@ -386,6 +386,9 @@ class EasycodeApp(App):
                 diff = await self.controller.get_task_diff(task_id)
                 return diff or f"No diff for task: {task_id}"
 
+            elif cmd_type == CommandType.DEBUG:
+                return await self.controller._cmd_debug(args.get("task_id", ""))
+
             elif cmd_type == CommandType.HELP:
                 return self.command_parser.get_help_text()
 

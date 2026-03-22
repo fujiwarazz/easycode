@@ -186,6 +186,7 @@ class Controller:
             "agents": self._cmd_agents,
             "help": self._cmd_help,
             "clear": self._cmd_clear,
+            "debug": self._cmd_debug,
         }
 
         handler = handlers.get(cmd)
@@ -347,6 +348,59 @@ You can also just type a goal directly without /plan"""
         await self.state_repository.clear_state()
         return "State cleared."
 
+    async def _cmd_debug(self, args: str) -> str:
+        """Handle /debug command."""
+        task_id = args if args else None
+
+        lines = ["=== DEBUG INFO ==="]
+
+        # Show git worktree list
+        lines.append("\n--- Git Worktrees ---")
+        try:
+            worktrees = await self.worktree_manager.list_worktrees()
+            for wt in worktrees:
+                lines.append(f"  {wt.path} | {wt.branch} | {wt.commit[:8]}")
+        except Exception as e:
+            lines.append(f"  Error: {e}")
+
+        # Show git branches
+        lines.append("\n--- Git Branches ---")
+        try:
+            import subprocess
+            result = subprocess.run(["git", "branch", "-a"], capture_output=True, text=True, cwd=self.paths.workspace)
+            for line in result.stdout.strip().split("\n")[:10]:
+                lines.append(f"  {line}")
+        except Exception as e:
+            lines.append(f"  Error: {e}")
+
+        # Show task details
+        if task_id:
+            task = self.state.tasks.get(task_id)
+            if task:
+                lines.append(f"\n--- Task {task_id} ---")
+                lines.append(f"  Status: {task.status.value}")
+                lines.append(f"  Title: {task.title}")
+                lines.append(f"  Error: {task.error_message or 'None'}")
+                if task.worktree:
+                    lines.append(f"  Worktree: {task.worktree.path}")
+                    lines.append(f"  Branch: {task.worktree.branch}")
+
+                result = self.state.results.get(task_id)
+                if result:
+                    lines.append(f"\n  Result success: {result.success}")
+                    lines.append(f"  Result exit_code: {result.exit_code}")
+                    lines.append(f"  Result stdout: {result.stdout[:200] if result.stdout else 'None'}...")
+                    lines.append(f"  Result stderr: {result.stderr[:200] if result.stderr else 'None'}...")
+            else:
+                lines.append(f"\n--- Task {task_id} not found ---")
+
+        # Show all tasks status
+        lines.append("\n--- All Tasks ---")
+        for tid, t in self.state.tasks.items():
+            lines.append(f"  {tid}: {t.status.value}")
+
+        return "\n".join(lines)
+
     async def run_task(self, task_id: str) -> RunResult:
         """
         Run a task with an agent.
@@ -465,7 +519,9 @@ You can also just type a goal directly without /plan"""
             task.error_message = str(e)
             task.completed_at = datetime.now()
 
-            logger.error(f"Task failed: {task_id} - {e}")
+            # Log full traceback
+            import traceback
+            logger.error(f"Task failed: {task_id} - {e}\n{traceback.format_exc()}")
 
             await self.event_bus.publish(create_task_event(
                 EventType.TASK_FAILED,

@@ -105,6 +105,19 @@ class AsyncSubprocess:
         assert self._process is not None
         assert self._process.stdout is not None
 
+        # If not merging stderr, we need to read it separately
+        stderr_task = None
+        if not self.merge_stderr and self._process.stderr:
+            async def read_stderr():
+                assert self._process is not None and self._process.stderr is not None
+                try:
+                    async for line in self._process.stderr:
+                        decoded = line.decode("utf-8", errors="replace").rstrip("\n\r")
+                        self._stderr_buffer.append(decoded)
+                except Exception:
+                    pass
+            stderr_task = asyncio.create_task(read_stderr())
+
         try:
             while True:
                 # Check timeout
@@ -132,6 +145,13 @@ class AsyncSubprocess:
         except asyncio.CancelledError:
             self._process.terminate()
             raise
+        finally:
+            # Wait for stderr reader to complete
+            if stderr_task:
+                try:
+                    await asyncio.wait_for(stderr_task, timeout=2.0)
+                except asyncio.TimeoutError:
+                    stderr_task.cancel()
 
     async def stream_both(self) -> AsyncIterator[tuple[str, bool]]:
         """
@@ -228,16 +248,27 @@ class AsyncSubprocess:
                     self._process.terminate()
                     await self._process.wait()
             else:
+                # Ensure process is fully terminated
                 await self._process.wait()
         except asyncio.CancelledError:
             self._process.terminate()
             await self._process.wait()
             raise
 
+        # Ensure returncode is set (sometimes it's None after wait)
+        if self._process.returncode is None:
+            # Give it a moment and poll
+            for _ in range(10):
+                await asyncio.sleep(0.1)
+                if self._process.returncode is not None:
+                    break
+
         duration = asyncio.get_event_loop().time() - self._start_time
 
+        return_code = self._process.returncode if self._process.returncode is not None else -1
+
         return ProcessResult(
-            return_code=self._process.returncode or -1,
+            return_code=return_code,
             stdout="\n".join(self._stdout_buffer),
             stderr="\n".join(self._stderr_buffer),
             command=self.command,

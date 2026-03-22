@@ -83,16 +83,30 @@ class WorktreeManager:
         if cwd is None:
             cwd = self.workspace
 
-        proc = AsyncSubprocess(["git"] + args, cwd=cwd)
+        cmd = ["git"] + args
+        logger.debug(f"Running git command: {' '.join(cmd)}")
+
+        proc = AsyncSubprocess(cmd, cwd=cwd)
 
         stdout_lines = []
         async for line in proc.stream():
             stdout_lines.append(line)
+            logger.debug(f"  [stdout] {line}")
 
         result = await proc.wait()
 
-        if check and not result.success:
-            raise GitError(f"Git command failed: git {' '.join(args)}\n{result.stderr}")
+        logger.debug(f"Git command completed: returncode={result.return_code}")
+        if result.stderr:
+            logger.debug(f"  [stderr] {result.stderr}")
+
+        if check and result.return_code != 0:
+            error_msg = f"Git command failed (code {result.return_code}): git {' '.join(args)}"
+            if result.stderr:
+                error_msg += f"\nstderr: {result.stderr}"
+            if result.stdout:
+                error_msg += f"\nstdout: {result.stdout}"
+            logger.error(error_msg)
+            raise GitError(error_msg)
 
         return result.return_code, result.stdout, result.stderr
 
@@ -120,9 +134,16 @@ class WorktreeManager:
                 _, branch_stdout, _ = await self._run_git(
                     ["branch", "--points-at", commit_hash], check=False
                 )
-                branches = [b.strip().lstrip("* ") for b in branch_stdout.strip().split("\n") if b.strip()]
-                if branches:
-                    return branches[0]
+                # Parse branch names, remove leading * and spaces
+                for line in branch_stdout.strip().split("\n"):
+                    line = line.strip()
+                    if line.startswith("* "):
+                        line = line[2:]
+                    elif line.startswith("+ "):
+                        line = line[2:]
+                    line = line.strip()
+                    if line and not line.startswith("refs/"):
+                        return line
                 # Return main as default
                 return "main"
             # Default to 'main' for new repos

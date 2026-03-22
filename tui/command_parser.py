@@ -26,6 +26,7 @@ class CommandType(Enum):
     MENTOR = "mentor"
     CLEAR = "clear"
     HELP = "help"
+    DEBUG = "debug"
     EXIT = "exit"
     QUIT = "quit"
 
@@ -76,6 +77,7 @@ class CommandParser:
             "l": CommandType.LOGS,
             "diff": CommandType.DIFF,
             "d": CommandType.DIFF,
+            "debug": CommandType.DEBUG,
             "worktree": CommandType.WORKTREE,
             "w": CommandType.WORKTREE,
             "mentor": CommandType.MENTOR,
@@ -172,6 +174,9 @@ class CommandParser:
         elif cmd_type == CommandType.MENTOR:
             args["agent_id"] = arg_str
 
+        elif cmd_type == CommandType.DEBUG:
+            args["task_id"] = arg_str if arg_str else None
+
         elif cmd_type in (CommandType.EXIT, CommandType.QUIT):
             pass  # No arguments
 
@@ -194,6 +199,7 @@ Commands:
   /agents          - List available agents
   /logs [task_id]  - Show logs for a task
   /diff <task_id>  - Show diff for a task
+  /debug [task_id] - Show debug info for a task
   /mentor <agent>  - Set mentor agent
   /clear           - Clear all state
   /help            - Show this help
