@@ -55,24 +55,24 @@ class EasycodeApp(App):
     CSS = """
     Screen {
         layout: grid;
-        grid-size: 2 3;
-        grid-rows: 1fr 1fr 3;
+        grid-size: 3 2;
+        grid-rows: 1fr 3;
         grid-columns: 1fr 2fr 1fr;
     }
 
     #left-panel {
         column-span: 1;
-        row-span: 2;
+        row-span: 1;
     }
 
     #center-panel {
         column-span: 1;
-        row-span: 2;
+        row-span: 1;
     }
 
     #right-panel {
         column-span: 1;
-        row-span: 2;
+        row-span: 1;
     }
 
     #input-area {

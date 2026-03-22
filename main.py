@@ -95,7 +95,8 @@ async def run_tui(config_path: Path) -> int:
     from tui.app import EasycodeApp
 
     config = load_config(config_path)
-    setup_logging(config)
+    # In TUI mode, only log to file, not console
+    setup_logging(config, console_output=False)
 
     app = EasycodeApp(config)
     await app.run_async()

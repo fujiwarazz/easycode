@@ -309,7 +309,6 @@ class InputBar(Container):
 
     DEFAULT_CSS = """
     InputBar {
-        dock: bottom;
         height: 3;
         padding: 0 1;
         background: $surface-darken-3;

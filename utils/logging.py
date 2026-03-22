@@ -80,6 +80,7 @@ def setup_logging(
     level: Optional[str] = None,
     log_dir: Optional[Path] = None,
     show_timestamps: bool = True,
+    console_output: bool = True,
 ) -> logging.Logger:
     """
     Set up logging for Easycode.
@@ -89,6 +90,7 @@ def setup_logging(
         level: Log level override (DEBUG, INFO, WARNING, ERROR).
         log_dir: Directory for log files.
         show_timestamps: Whether to show timestamps in console output.
+        console_output: Whether to output to console (disable for TUI mode).
 
     Returns:
         Configured logger instance.
@@ -112,11 +114,12 @@ def setup_logging(
 
     log_level = log_level.upper()
 
-    # Console handler
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(getattr(logging, log_level, logging.INFO))
-    console_handler.setFormatter(EasycodeFormatter(use_colors=True, show_timestamps=show_timestamps))
-    logger.addHandler(console_handler)
+    # Console handler (only if console_output is True)
+    if console_output:
+        console_handler = logging.StreamHandler(sys.stdout)
+        console_handler.setLevel(getattr(logging, log_level, logging.INFO))
+        console_handler.setFormatter(EasycodeFormatter(use_colors=True, show_timestamps=show_timestamps))
+        logger.addHandler(console_handler)
 
     # File handler
     if log_dir:
