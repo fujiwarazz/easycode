@@ -438,9 +438,15 @@ You can also just type a goal directly without /plan"""
 
         logger.info(f"Running task: {task_id}")
 
+        # Initialize result to track progress
+        result = None
+        worktree_path = None
+        branch_name = None
+
         try:
             # Create worktree
             branch_name, worktree_path = await self.worktree_manager.create_worktree(task_id)
+            logger.info(f"Worktree created: {worktree_path} on branch {branch_name}")
 
             # Create worktree session
             worktree = WorktreeSession(
@@ -476,14 +482,23 @@ You can also just type a goal directly without /plan"""
                 context=context,
             )
 
+            logger.info(f"Agent completed: success={result.success}, files={result.changed_files}")
+
             # Collect diff if successful
             if result.success:
-                diff_collector = DiffCollector(worktree_path)
-                diff_result = await diff_collector.collect_diff()
-                result.diff = diff_result.raw_diff
-                result.changed_files = [f.path for f in diff_result.files]
+                try:
+                    diff_collector = DiffCollector(worktree_path)
+                    diff_result = await diff_collector.collect_diff()
+                    result.diff = diff_result.raw_diff
+                    # Update changed_files from diff result (more accurate)
+                    if diff_result.files:
+                        result.changed_files = [f.path for f in diff_result.files]
+                    logger.info(f"Diff collected: {len(result.changed_files)} files")
+                except Exception as e:
+                    logger.error(f"Failed to collect diff: {e}")
+                    # Don't fail the task just because diff collection failed
 
-            # Update task status
+            # Update task status based on agent result
             task.status = TaskStatus.DONE if result.success else TaskStatus.FAILED
             task.completed_at = datetime.now()
             task.result_summary = result.summary
@@ -503,25 +518,44 @@ You can also just type a goal directly without /plan"""
 
             logger.info(f"Task completed: {task_id} (success={result.success})")
 
-            # Save state
-            await self.state_repository.save_state(self.state)
-
-            return result
-
         except asyncio.CancelledError:
             task.status = TaskStatus.FAILED
             task.error_message = "Task cancelled"
+            task.completed_at = datetime.now()
             logger.info(f"Task cancelled: {task_id}")
+
+            # Create a result for cancelled task
+            result = RunResult(
+                task_id=task_id,
+                agent_id=task.assigned_agent or "mock",
+                success=False,
+                summary="Task cancelled",
+                stderr="Task was cancelled",
+                exit_code=-1,
+            )
+            self.state.results[task_id] = result
             raise
 
         except Exception as e:
+            import traceback
+            logger.error(f"Task failed: {task_id} - {e}\n{traceback.format_exc()}")
+
             task.status = TaskStatus.FAILED
             task.error_message = str(e)
             task.completed_at = datetime.now()
 
-            # Log full traceback
-            import traceback
-            logger.error(f"Task failed: {task_id} - {e}\n{traceback.format_exc()}")
+            # Create a result for failed task (preserve what we have)
+            result = RunResult(
+                task_id=task_id,
+                agent_id=task.assigned_agent or "mock",
+                success=False,
+                summary=f"Task failed: {e}",
+                stderr=str(e),
+                exit_code=1,
+            )
+            if worktree_path:
+                result.changed_files = []  # Will be empty if agent didn't complete
+            self.state.results[task_id] = result
 
             await self.event_bus.publish(create_task_event(
                 EventType.TASK_FAILED,
@@ -530,9 +564,17 @@ You can also just type a goal directly without /plan"""
                 error=str(e),
             ))
 
-            await self.state_repository.save_state(self.state)
+        finally:
+            # Always try to save state (even on failure)
+            # Use a separate try-except to ensure we don't lose the result
+            try:
+                save_success = await self.state_repository.save_state(self.state)
+                if not save_success:
+                    logger.warning(f"Failed to save state for task {task_id}, but task result is preserved in memory")
+            except Exception as save_error:
+                logger.error(f"Error saving state: {save_error}")
 
-            raise
+        return result
 
     async def merge_task(self, task_id: str) -> str:
         """

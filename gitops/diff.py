@@ -5,6 +5,7 @@ Provides functions to collect and analyze git diffs from agent work.
 """
 
 import difflib
+import traceback
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -84,7 +85,7 @@ class DiffCollector:
 
     async def get_changed_files(self, base_ref: str = "HEAD") -> list[str]:
         """
-        Get list of changed files.
+        Get list of changed files (tracked files with modifications).
 
         Args:
             base_ref: Base reference to compare against.
@@ -126,8 +127,11 @@ class DiffCollector:
             DiffResult with all changes.
         """
         result = DiffResult()
+        all_diffs = []  # Collect all diff output
 
-        # Get diff stats
+        # 1. Get tracked file changes (modified/deleted/renamed)
+        logger.debug(f"Getting diff for tracked files against {base_ref}")
+
         _, stats_stdout, _ = await self._run_git(
             ["diff", "--numstat", base_ref]
         )
@@ -146,12 +150,13 @@ class DiffCollector:
 
                 file_stats[path] = {"additions": additions, "deletions": deletions}
 
-        # Get full diff
+        # Get full diff for tracked files
         _, diff_stdout, _ = await self._run_git(
             ["diff", base_ref]
         )
 
-        result.raw_diff = diff_stdout
+        if diff_stdout:
+            all_diffs.append(diff_stdout)
 
         # Parse diff into per-file diffs
         current_file = None
@@ -191,38 +196,54 @@ class DiffCollector:
                 diff="\n".join(current_diff_lines),
             ))
 
-        # Include untracked files if requested
+        # 2. Handle untracked files (new files not yet in git)
         if include_untracked:
             untracked = await self.get_untracked_files()
+            logger.debug(f"Found {len(untracked)} untracked files: {untracked}")
+
             for path in untracked:
                 file_path = self.repo_path / path
                 if file_path.is_file():
                     try:
                         content = file_path.read_text(encoding="utf-8")
                         lines = content.split("\n")
-                        additions = len(lines)
+                        # Count non-empty lines as additions
+                        additions = len([l for l in lines if l.strip()])
 
-                        # Create diff for new file
-                        diff_lines = [f"--- /dev/null", f"+++ b/{path}"]
-                        for i, line in enumerate(lines, 1):
+                        # Create diff for new file (standard unified diff format)
+                        diff_lines = [
+                            f"diff --git a/{path} b/{path}",
+                            "new file mode 100644",
+                            "index 0000000..1234567",
+                            "--- /dev/null",
+                            f"+++ b/{path}",
+                        ]
+                        for line in lines:
                             diff_lines.append(f"+{line}")
+
+                        diff_content = "\n".join(diff_lines)
+                        all_diffs.append(diff_content)
 
                         result.files.append(FileDiff(
                             path=path,
                             status="added",
                             additions=additions,
                             deletions=0,
-                            diff="\n".join(diff_lines),
+                            diff=diff_content,
                         ))
-                        result.total_additions += additions
+                        logger.debug(f"Added untracked file to diff: {path} ({additions} lines)")
 
                     except Exception as e:
-                        logger.warning(f"Failed to read untracked file {path}: {e}")
+                        logger.warning(f"Failed to read untracked file {path}: {e}\n{traceback.format_exc()}")
 
-        # Calculate totals
-        for f in result.files:
-            result.total_additions += f.additions
-            result.total_deletions += f.deletions
+        # Combine all diffs
+        result.raw_diff = "\n".join(all_diffs) if all_diffs else ""
+
+        # Calculate totals (don't double count)
+        result.total_additions = sum(f.additions for f in result.files)
+        result.total_deletions = sum(f.deletions for f in result.files)
+
+        logger.info(f"Diff collected: {result.file_count} files, +{result.total_additions}/-{result.total_deletions} lines")
 
         return result
 

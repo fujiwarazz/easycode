@@ -5,6 +5,9 @@ Provides JSON-based storage for application state.
 """
 
 import json
+import os
+import tempfile
+import traceback
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
@@ -72,19 +75,47 @@ class StateRepository:
 
         return data
 
-    async def save_state(self, state: AppState) -> None:
+    async def save_state(self, state: AppState) -> bool:
         """
-        Save the entire application state.
+        Save the entire application state with atomic write.
 
         Args:
             state: Application state to save.
+
+        Returns:
+            True if save was successful, False otherwise.
         """
-        data = state.model_dump()
+        try:
+            # Prepare data - use mode='json' to avoid circular reference issues
+            data = state.model_dump(mode='json')
 
-        with open(self._state_file, "w", encoding="utf-8") as f:
-            json.dump(data, f, default=self._serialize_datetime, indent=2)
+            # Atomic write: write to temp file, then rename
+            fd, tmp_path = tempfile.mkstemp(
+                dir=self.state_dir,
+                prefix="state_tmp_",
+                suffix=".json"
+            )
 
-        logger.debug(f"State saved to {self._state_file}")
+            try:
+                with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                    json.dump(data, f, default=self._serialize_datetime, indent=2)
+
+                # Atomic rename
+                os.replace(tmp_path, self._state_file)
+                logger.debug(f"State saved to {self._state_file}")
+                return True
+
+            except Exception as e:
+                # Clean up temp file on failure
+                try:
+                    os.unlink(tmp_path)
+                except Exception:
+                    pass
+                raise
+
+        except Exception as e:
+            logger.error(f"Failed to save state: {e}\n{traceback.format_exc()}")
+            return False
 
     async def load_state(self) -> AppState:
         """
@@ -143,18 +174,47 @@ class StateRepository:
                 mentor_agent=data.get("mentor_agent", "claude-cli"),
             )
 
-        except Exception as e:
-            logger.error(f"Failed to load state: {e}")
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse state.json (corrupted?): {e}")
+            # Backup corrupted file
+            backup_path = self._state_file.with_suffix(".json.corrupted")
+            self._state_file.rename(backup_path)
+            logger.info(f"Corrupted state backed up to {backup_path}")
             return AppState()
 
-    async def save_task(self, task: Task) -> None:
-        """Save a single task."""
-        task_file = self._tasks_dir / f"{task.id}.json"
+        except Exception as e:
+            logger.error(f"Failed to load state: {e}\n{traceback.format_exc()}")
+            return AppState()
 
-        with open(task_file, "w", encoding="utf-8") as f:
-            json.dump(task.model_dump(), f, default=self._serialize_datetime, indent=2)
+    async def save_task(self, task: Task) -> bool:
+        """Save a single task with atomic write."""
+        try:
+            task_file = self._tasks_dir / f"{task.id}.json"
 
-        logger.debug(f"Task saved: {task.id}")
+            fd, tmp_path = tempfile.mkstemp(
+                dir=self._tasks_dir,
+                prefix=f"task_{task.id}_tmp_",
+                suffix=".json"
+            )
+
+            try:
+                with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                    json.dump(task.model_dump(mode='json'), f, default=self._serialize_datetime, indent=2)
+
+                os.replace(tmp_path, task_file)
+                logger.debug(f"Task saved: {task.id}")
+                return True
+
+            except Exception:
+                try:
+                    os.unlink(tmp_path)
+                except Exception:
+                    pass
+                raise
+
+        except Exception as e:
+            logger.error(f"Failed to save task {task.id}: {e}")
+            return False
 
     async def load_task(self, task_id: str) -> Optional[Task]:
         """Load a single task."""
@@ -163,11 +223,15 @@ class StateRepository:
         if not task_file.exists():
             return None
 
-        with open(task_file, "r", encoding="utf-8") as f:
-            data = json.load(f)
+        try:
+            with open(task_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
 
-        data = self._deserialize_datetime(data)
-        return Task(**data)
+            data = self._deserialize_datetime(data)
+            return Task(**data)
+        except Exception as e:
+            logger.error(f"Failed to load task {task_id}: {e}")
+            return None
 
     async def delete_task(self, task_id: str) -> bool:
         """Delete a task file."""
@@ -178,14 +242,35 @@ class StateRepository:
             return True
         return False
 
-    async def save_result(self, result: RunResult) -> None:
-        """Save a run result."""
-        result_file = self._results_dir / f"{result.task_id}.json"
+    async def save_result(self, result: RunResult) -> bool:
+        """Save a run result with atomic write."""
+        try:
+            result_file = self._results_dir / f"{result.task_id}.json"
 
-        with open(result_file, "w", encoding="utf-8") as f:
-            json.dump(result.model_dump(), f, default=self._serialize_datetime, indent=2)
+            fd, tmp_path = tempfile.mkstemp(
+                dir=self._results_dir,
+                prefix=f"result_{result.task_id}_tmp_",
+                suffix=".json"
+            )
 
-        logger.debug(f"Result saved: {result.task_id}")
+            try:
+                with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                    json.dump(result.model_dump(mode='json'), f, default=self._serialize_datetime, indent=2)
+
+                os.replace(tmp_path, result_file)
+                logger.debug(f"Result saved: {result.task_id}")
+                return True
+
+            except Exception:
+                try:
+                    os.unlink(tmp_path)
+                except Exception:
+                    pass
+                raise
+
+        except Exception as e:
+            logger.error(f"Failed to save result {result.task_id}: {e}")
+            return False
 
     async def load_result(self, task_id: str) -> Optional[RunResult]:
         """Load a run result."""
@@ -194,11 +279,15 @@ class StateRepository:
         if not result_file.exists():
             return None
 
-        with open(result_file, "r", encoding="utf-8") as f:
-            data = json.load(f)
+        try:
+            with open(result_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
 
-        data = self._deserialize_datetime(data)
-        return RunResult(**data)
+            data = self._deserialize_datetime(data)
+            return RunResult(**data)
+        except Exception as e:
+            logger.error(f"Failed to load result {task_id}: {e}")
+            return None
 
     async def clear_state(self) -> None:
         """Clear all saved state."""
@@ -218,15 +307,29 @@ class StateRepository:
     async def export_state(self) -> str:
         """Export state as JSON string."""
         state = await self.load_state()
-        return json.dumps(state.model_dump(), default=self._serialize_datetime, indent=2)
+        return json.dumps(state.model_dump(mode='json'), default=self._serialize_datetime, indent=2)
 
     async def import_state(self, json_str: str) -> AppState:
         """Import state from JSON string."""
         data = json.loads(json_str)
 
-        # Save to file
-        with open(self._state_file, "w", encoding="utf-8") as f:
-            json.dump(data, f, default=self._serialize_datetime, indent=2)
+        # Atomic write
+        fd, tmp_path = tempfile.mkstemp(
+            dir=self.state_dir,
+            prefix="state_import_tmp_",
+            suffix=".json"
+        )
 
-        # Reload
+        try:
+            with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                json.dump(data, f, default=self._serialize_datetime, indent=2)
+
+            os.replace(tmp_path, self._state_file)
+        except Exception:
+            try:
+                os.unlink(tmp_path)
+            except Exception:
+                pass
+            raise
+
         return await self.load_state()
