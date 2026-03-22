@@ -91,7 +91,7 @@ class EasycodeApp(App):
         Binding("r", "run", "Run"),
         Binding("m", "merge", "Merge"),
         Binding("d", "diff", "Diff"),
-        Binding("l", "logs", "Logs"),
+        Binding("v", "toggle_detail", "View"),
         Binding("h", "help", "Help"),
         Binding("q", "quit", "Quit"),
     ]
@@ -417,6 +417,14 @@ class EasycodeApp(App):
         """Handle 'd' key - view diff."""
         if self.current_task_id:
             self._update_task_detail(self.current_task_id)
+
+    def action_toggle_detail(self) -> None:
+        """Handle 'v' key - toggle detail panel."""
+        try:
+            panel = self.query_one(TaskDetailPanel)
+            panel.toggle()
+        except NoMatches:
+            pass
 
     def action_logs(self) -> None:
         """Handle 'l' key - view logs."""

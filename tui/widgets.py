@@ -241,23 +241,56 @@ class TaskDetailPanel(Container):
         border: solid magenta;
         background: $surface;
     }
+    TaskDetailPanel.collapsed {
+        width: 3;
+    }
+    TaskDetailPanel.collapsed > VerticalScroll {
+        display: none;
+    }
     TaskDetailPanel > Label {
         text-style: bold;
         padding: 0 1;
         background: $primary;
         color: $text;
     }
+    TaskDetailPanel.collapsed > Label {
+        writing-mode: vertical;
+        height: 100%;
+    }
     """
 
+    collapsed: reactive[bool] = reactive(False)
     current_task_id: reactive[str] = reactive("")
 
     def compose(self) -> ComposeResult:
-        yield Label("📄 Task Details")
+        yield Label("📄 Task Details [click to collapse]")
         with VerticalScroll(id="detail-scroll"):
             yield Static(id="detail-content", expand=True)
 
+    def on_click(self) -> None:
+        """Toggle collapsed state on click."""
+        self.collapsed = not self.collapsed
+        self._update_collapsed()
+
+    def _update_collapsed(self) -> None:
+        """Update UI for collapsed state."""
+        if self.collapsed:
+            self.add_class("collapsed")
+            self.query_one(Label).update("📄")
+        else:
+            self.remove_class("collapsed")
+            self.query_one(Label).update("📄 Task Details [click to collapse]")
+
+    def toggle(self) -> None:
+        """Programmatically toggle collapsed state."""
+        self.collapsed = not self.collapsed
+        self._update_collapsed()
+
     def update_detail(self, task: dict, result: Optional[dict] = None) -> None:
         """Update the task detail view."""
+        if self.collapsed:
+            return
+
         content = self.query_one("#detail-content", Static)
 
         lines = []
@@ -333,7 +366,7 @@ class InputBar(Container):
 
     def compose(self) -> ComposeResult:
         yield Input(placeholder="Type a command or goal... (n:New r:Run m:Merge q:Quit)", id="main-input")
-        yield Label("[n]New [p]Plan [r]Run [m]Merge [d]Diff [h]Help [q]Quit", classes="hints")
+        yield Label("[n]New [p]Plan [r]Run [m]Merge [d]Diff [v]View [h]Help [q]Quit", classes="hints")
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         """Handle input submission."""
